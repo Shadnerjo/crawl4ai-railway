@@ -1,1 +1,1 @@
-{"name":"research-hours-scheduler","version":"1.0.0","private":true,"type":"module","scripts":{"start":"node stop-test.js"},"engines":{"node":">=22"}}
+{"name":"research-hours-scheduler","version":"1.0.0","private":true,"type":"module","scripts":{"start":"node scheduler.js","test":"node --test clock.test.js"},"engines":{"node":">=22"}}
