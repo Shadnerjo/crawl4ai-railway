@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import * as z from 'zod/v4';
-import { searchWeb, scrapeWeb } from './logic.js';
+import { inResearchHours, searchWeb, scrapeWeb } from './logic.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -44,7 +44,10 @@ app.use('/mcp', async (req, res, next) => {
 function createServer() {
   const server = new McpServer({ name: 'crawl4ai-web', version: '0.1.0' });
   const wrap = fn => async args => {
-    try { return { content: [{ type: 'text', text: JSON.stringify(await fn(args)) }] }; }
+    try {
+      if (!inResearchHours()) throw new Error('Web research is available Monday–Friday 5 PM–2 AM and Saturday–Sunday 4 PM–3 AM Eastern Time.');
+      return { content: [{ type: 'text', text: JSON.stringify(await fn(args)) }] };
+    }
     catch (err) { return { isError: true, content: [{ type: 'text', text: err.message || 'Request failed.' }] }; }
   };
   server.registerTool('search_web', {

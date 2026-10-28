@@ -1,6 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validatePublicUrl, searchWeb, scrapeWeb } from '../src/logic.js';
+import { inResearchHours, validatePublicUrl, searchWeb, scrapeWeb } from '../src/logic.js';
+
+test('research hours follow Eastern time, including overnight, weekends and daylight saving', () => {
+  const cases = [
+    ['2026-10-26T20:59:00Z', false], ['2026-10-26T21:00:00Z', true],
+    ['2026-10-27T05:59:00Z', true], ['2026-10-27T06:00:00Z', false],
+    ['2026-10-31T19:59:00Z', false], ['2026-10-31T20:00:00Z', true],
+    ['2026-11-01T07:59:00Z', true], ['2026-11-01T08:00:00Z', false],
+    ['2026-11-01T20:59:00Z', false], ['2026-11-01T21:00:00Z', true],
+    ['2026-11-02T07:59:00Z', true], ['2026-11-02T08:00:00Z', false],
+    ['2026-11-02T21:59:00Z', false], ['2026-11-02T22:00:00Z', true],
+    ['2026-11-03T06:59:00Z', true], ['2026-11-03T07:00:00Z', false],
+    ['2026-10-31T05:59:00Z', true], ['2026-10-31T06:00:00Z', false]
+  ];
+  for (const [instant, expected] of cases) assert.equal(inResearchHours(new Date(instant)), expected, instant);
+});
 
 const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
 const privateLookup = async () => [{ address: '192.168.1.1', family: 4 }];

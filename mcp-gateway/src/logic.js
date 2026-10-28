@@ -2,6 +2,22 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 import ipaddr from 'ipaddr.js';
 
+// Windows are based on the day the session starts, not the day after midnight.
+export function inResearchHours(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', weekday: 'short', hour: '2-digit',
+    minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date);
+  const get = type => parts.find(part => part.type === type)?.value;
+  const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(get('weekday'));
+  const minutes = Number(get('hour')) * 60 + Number(get('minute'));
+  if (day < 0 || !Number.isFinite(minutes)) throw new Error('Could not determine research hours.');
+  const weekend = d => d === 0 || d === 6;
+  if (minutes >= (weekend(day) ? 16 : 17) * 60) return true;
+  const previousDay = (day + 6) % 7;
+  return minutes < (weekend(previousDay) ? 3 : 2) * 60;
+}
+
 export async function validatePublicUrl(input, lookup = dns.lookup) {
   let url;
   try { url = new URL(input); } catch { throw new Error('Provide a valid absolute HTTP or HTTPS URL.'); }
