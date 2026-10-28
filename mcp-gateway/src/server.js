@@ -73,4 +73,3 @@ app.post('/mcp', async (req, res) => {
 app.all('/mcp', (_req, res) => res.status(405).end());
 const port = Number(env.PORT || 3000);
 app.listen(port, '0.0.0.0', () => console.log(`MCP gateway listening on ${port}`));
-

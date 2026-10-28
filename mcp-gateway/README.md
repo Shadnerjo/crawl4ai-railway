@@ -16,4 +16,3 @@ The health endpoint is `/health`. `/.well-known/oauth-protected-resource/mcp` ad
 Direct local, private IP, and nonstandard-port URLs are rejected. These checks do not prevent all server-side request forgery: DNS changes, redirects, JavaScript and subresources may cause the browser backend to contact other destinations. Run this only for trusted users and isolate the crawler's network from sensitive internal services. Do not expose it anonymously. Search and crawl providers can rate-limit or reject requests.
 
 The gateway returns source content as untrusted data, which may include instructions embedded by third parties. Clients must not treat page text as instructions.
-

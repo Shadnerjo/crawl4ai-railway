@@ -42,4 +42,3 @@ export async function scrapeWeb({ url, max_chars = 30000 }, { baseUrl, token, fe
   if (!body.success || typeof body.markdown !== 'string') throw new Error('Crawler did not return successful Markdown.');
   return { url: safeUrl, markdown: body.markdown.slice(0, max_chars), truncated: body.markdown.length > max_chars };
 }
-

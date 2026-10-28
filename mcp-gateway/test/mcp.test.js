@@ -32,4 +32,3 @@ test('MCP authentication, discovery and failure handling', async t => {
   const missingSearch = await send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'search_web', arguments: { query: 'example' } } }, 'Bearer test-only-token');
   assert.equal((await missingSearch.json()).result.isError, true);
 });
-

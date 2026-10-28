@@ -37,4 +37,3 @@ test('scrape uses backend authentication and truncates content', async () => {
 test('scrape surfaces failed backend requests', async () => {
   await assert.rejects(scrapeWeb({ url: 'https://example.com' }, { baseUrl: 'http://crawler/', token: 'x', lookup: publicLookup, fetchFn: async () => ({ ok: false, status: 500 }) }), /HTTP 500/);
 });
-
