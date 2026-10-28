@@ -1,4 +1,5 @@
-import { boundaryAction } from './clock.js';
+import { researchOpen } from './clock.js';
+import { pathToFileURL } from 'node:url';
 
 const projectId='a25947de-95ab-4852-bb8b-82ac2d962d2a';
 const environmentId='49b5b59d-733a-4d13-ac67-07680a38d885';
@@ -20,62 +21,110 @@ async function api(query,variables={}) {
   if(result.errors?.length||!result.data)throw Error('Railway rejected scheduler operation');
   return result.data;
 }
-async function reachable(target) {
-  try {return (await fetch(target.health,{signal:AbortSignal.timeout(3000),redirect:'error'})).ok;}
-  catch{return false;}
-}
-async function verify(target,expected) {
-  // Require two consecutive observations to reduce transient false results.
-  let consecutive=0;
-  for(let n=0;n<20;n++) {
-    if(await reachable(target)===expected)consecutive++;else consecutive=0;
-    if(consecutive>=2){log({service:target.name,event:'verified',reachable:expected});return;}
-    await pause(2000);
-  }
-  throw Error(`${target.name} did not become ${expected?'reachable':'unreachable'}`);
-}
-async function resolveTargets() {
-  const resolved=[];
-  for(const target of targets){
-    const result=await api('query List($input:DeploymentListInput!) { deployments(input:$input,first:1) { edges { node { id status } } } }',{
-      input:{projectId,environmentId,serviceId:target.id}
-    });
-    const deployment=result.deployments?.edges?.[0]?.node;
-    if(!deployment||!['SUCCESS','SLEEPING','CRASHED'].includes(deployment.status))throw Error(`${target.name} has no stable deployment to control`);
-    resolved.push({...target,deployment:deployment.id});
-  }
-  return resolved;
-}
-async function operate(action,resolved) {
-  const ordered=action==='stop'?[...resolved].reverse():resolved;
-  const errors=[];
-  for(const target of ordered){
+export function createController({request=api,fetchFn=fetch,pauseFn=pause,logger=log,configuredTargets=targets,attempts=20}={}) {
+  const stable=new Set(['SUCCESS','SLEEPING','CRASHED']);
+  async function probe(target) {
     try {
-      const stop=action==='stop';
-      const field=stop?'deploymentStop':'deploymentRestart';
-      const result=await api(`mutation Action($id:String!) { ${field}(id:$id) }`,{id:target.deployment});
-      if(result[field]!==true)throw Error('Railway did not accept operation');
-      log({service:target.name,event:action,accepted:true});
-      await verify(target,!stop);
-    }catch(error){errors.push(error);log({service:target.name,event:'error',message:error.message});}
+      const response=await fetchFn(target.health,{signal:AbortSignal.timeout(3000),redirect:'error'});
+      const observation={responded:true,healthy:response.ok,status:response.status};
+      // Closing a response body must not turn an observed HTTP response into a
+      // connection failure: even HTTP 500 proves a server is still responding.
+      try{await response.body?.cancel();}catch{}
+      return observation;
+    }catch{return {responded:false,healthy:false};}
   }
-  if(errors.length)throw Error(`${errors.length} service operation(s) failed`);
+  async function verify(target,expected) {
+    let consecutive=0;
+    for(let n=0;n<attempts;n++) {
+      const observation=await probe(target);
+      const matches=expected?observation.healthy:!observation.responded;
+      if(matches)consecutive++;else consecutive=0;
+      if(consecutive>=2){logger({service:target.name,event:'verified',reachable:expected});return;}
+      if(n+1<attempts)await pauseFn(2000);
+    }
+    throw Error(`${target.name} did not become ${expected?'healthy':'unreachable'}`);
+  }
+  async function resolveTargets() {
+    const resolved=[];
+    for(const target of configuredTargets){
+      try {
+        const result=await request('query List($input:DeploymentListInput!) { deployments(input:$input,first:10) { edges { node { id status } } } }',{
+          input:{projectId,environmentId,serviceId:target.id}
+        });
+        // A newer failed/building attempt can coexist with an older live build.
+        // The API returns newest first; stop every stable overlap, start only
+        // the most recent stable build, and never revive removed history.
+        const deployments=result.deployments?.edges?.map(edge=>edge.node).filter(deployment=>stable.has(deployment.status));
+        if(!deployments?.length)throw Error(`${target.name} has no stable deployment to control`);
+        resolved.push({...target,deployments});
+      }catch(error){resolved.push({...target,deployments:[],resolutionError:error.message});}
+    }
+    return resolved;
+  }
+  async function operate(action,resolved) {
+    if(!['start','stop'].includes(action))throw Error('Invalid scheduler operation');
+    const stop=action==='stop';
+    const ordered=stop?[...resolved].reverse():resolved;
+    const errors=[];
+    const recordError=(target,error)=>{errors.push(error);logger({service:target.name,event:'error',message:error.message});};
+    for(const target of ordered){
+      if(target.resolutionError){recordError(target,Error(target.resolutionError));continue;}
+      const selected=stop?target.deployments:target.deployments.slice(0,1);
+      const field=stop?'deploymentStop':'deploymentRestart';
+      for(const deployment of selected){
+        try {
+          const result=await request(`mutation Action($id:String!) { ${field}(id:$id) }`,{id:deployment.id});
+          if(result[field]!==true)throw Error('Railway did not accept operation');
+          logger({service:target.name,event:action,accepted:true});
+        }catch(error){recordError(target,error);}
+      }
+      try{await verify(target,!stop);}catch(error){recordError(target,error);}
+    }
+    if(errors.length)throw new AggregateError(errors,`${errors.length} scheduler operation(s) failed`);
+  }
+  async function testCycle(resolved) {
+    for(const target of resolved){
+      if(target.resolutionError)throw Error(target.resolutionError);
+      if(!(await probe(target)).healthy)throw Error(`${target.name} failed baseline; test cancelled`);
+    }
+    try{await operate('stop',resolved);logger({event:'full-stop-verified'});}
+    finally{await operate('start',resolved);logger({event:'full-restoration-verified'});}
+  }
+  async function reconcile(action,resolved) {
+    if(!['start','stop'].includes(action))throw Error('Invalid scheduler operation');
+    const stop=action==='stop';
+    const ordered=stop?[...resolved].reverse():resolved;
+    const errors=[];
+    for(const target of ordered){
+      try{
+        if(target.resolutionError)throw Error(target.resolutionError);
+        const observation=await probe(target);
+        if(!stop&&observation.healthy){logger({service:target.name,event:'already',action});continue;}
+        if(stop&&!observation.responded){
+          await verify(target,false);
+          logger({service:target.name,event:'already',action});
+          continue;
+        }
+        await operate(action,[target]);
+      }catch(error){errors.push(error);logger({service:target.name,event:'error',message:error.message});}
+    }
+    if(errors.length)throw new AggregateError(errors,`${errors.length} service reconciliation(s) failed`);
+  }
+  return {probe,verify,resolveTargets,operate,reconcile,testCycle};
 }
 async function main(){
   if(!token)throw Error('Scheduler project token is missing');
   const scope=await api('query { projectToken { projectId environmentId } }');
   if(scope.projectToken?.projectId!==projectId||scope.projectToken?.environmentId!==environmentId)throw Error('Scheduler token scope mismatch');
-  const action=boundaryAction(new Date());
+  const action=researchOpen(new Date())?'start':'stop';
   const testDeadline=Number(process.env.TEST_CYCLE_UNTIL || 0);
   // Test authorization expires even if the orchestration is interrupted.
   const testCycle=testDeadline>Date.now() && testDeadline-Date.now()<=15*60*1000;
   log({event:'schedule',timeZone:'America/New_York',action,testCycle});
-  if(!action&&!testCycle)return;
-  const resolved=await resolveTargets();
-  if(testCycle){
-    for(const target of resolved)if(!await reachable(target))throw Error(`${target.name} failed baseline; test cancelled`);
-    try{await operate('stop',resolved);log({event:'full-stop-verified'});}
-    finally{await operate('start',resolved);log({event:'full-restoration-verified'});}
-  }else await operate(action,resolved);
+  const controller=createController();
+  const resolved=await controller.resolveTargets();
+  if(testCycle)await controller.testCycle(resolved);
+  else await controller.reconcile(action,resolved);
 }
-main().catch(error=>{console.error(error.message);process.exitCode=1;});
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)
+  main().catch(error=>{console.error(error.message);process.exitCode=1;});

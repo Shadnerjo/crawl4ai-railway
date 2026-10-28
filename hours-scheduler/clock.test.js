@@ -1,6 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundaryAction } from './clock.js';
+import { boundaryAction, researchOpen } from './clock.js';
+
+test('desired research availability covers complete weekday and weekend windows', () => {
+  const days=[
+    ['2026-07-06',17,3],['2026-07-07',17,2],['2026-07-08',17,2],
+    ['2026-07-09',17,2],['2026-07-10',17,2],['2026-07-11',16,2],['2026-07-12',16,3]
+  ];
+  for(const [day,start,stop] of days){
+    const at=(hour,minute=0)=>new Date(`${day}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:00-04:00`);
+    assert.equal(researchOpen(at(0)),true,`${day} overnight`);
+    assert.equal(researchOpen(at(stop-1,59)),true,`${day} before close`);
+    assert.equal(researchOpen(at(stop)),false,`${day} closed`);
+    assert.equal(researchOpen(at(12)),false,`${day} midday`);
+    assert.equal(researchOpen(at(start-1,59)),false,`${day} before open`);
+    assert.equal(researchOpen(at(start)),true,`${day} opens`);
+    assert.equal(researchOpen(at(start,30)),true,`${day} remains open after boundary grace`);
+    assert.equal(researchOpen(at(23,59)),true,`${day} evening`);
+  }
+});
+
+test('desired availability survives both daylight saving transitions',()=>{
+  for(const [instant,expected] of [
+    ['2026-03-08T06:59:59Z',true],['2026-03-08T07:00:00Z',false],
+    ['2026-03-08T19:59:59Z',false],['2026-03-08T20:00:00Z',true],
+    ['2026-11-01T05:30:00Z',true],['2026-11-01T06:30:00Z',true],
+    ['2026-11-01T07:59:59Z',true],['2026-11-01T08:00:00Z',false],
+    ['2026-11-01T20:59:59Z',false],['2026-11-01T21:00:00Z',true],
+    ['2026-11-02T07:59:59Z',true],['2026-11-02T08:00:00Z',false]
+  ])assert.equal(researchOpen(new Date(instant)),expected,instant);
+  assert.throws(()=>researchOpen(new Date('invalid')));
+});
 
 test('each day starts at its specified Eastern hour and closes the previous evening window', () => {
   const days = [
