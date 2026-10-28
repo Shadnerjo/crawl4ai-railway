@@ -1,0 +1,14 @@
+use_default_settings:
+  engines:
+    remove:
+      - google
+general:
+  instance_name: Private Web Search
+server:
+  public_instance: false
+  limiter: false
+  image_proxy: false
+search:
+  formats:
+    - json
+    - html

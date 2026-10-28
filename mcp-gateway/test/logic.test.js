@@ -11,19 +11,20 @@ test('rejects local, literal, malformed, private and credential-bearing URLs', a
   await assert.rejects(validatePublicUrl('https://example.com', async () => [{ address: '::ffff:127.0.0.1' }]));
   assert.equal(await validatePublicUrl('https://example.com', publicLookup), 'https://example.com/');
 });
-test('search passes bounded query and only returns structured result fields', async () => {
+test('search passes the query and returns bounded structured result fields', async () => {
   const fetchFn = async (url, options) => {
     assert.equal(url.searchParams.get('q'), 'test query');
-    assert.equal(url.searchParams.get('count'), '1');
-    assert.equal(options.headers['X-Subscription-Token'], 'secret');
-    return { ok: true, json: async () => ({ web: { results: [{ title: 'Title', url: 'https://example.com', description: 'Description', extra: 'ignored' }] } }) };
+    assert.equal(url.searchParams.get('format'), 'json');
+    assert.equal(options.redirect, 'error');
+    return { ok: true, json: async () => ({ results: [{ title: 'Title', url: 'https://example.com', content: 'Description', engines: ['test'], extra: 'ignored' }] }) };
   };
-  const result = await searchWeb({ query: 'test query', count: 1 }, { key: 'secret', fetchFn });
-  assert.deepEqual(result.results, [{ title: 'Title', url: 'https://example.com', description: 'Description' }]);
+  const result = await searchWeb({ query: 'test query', count: 1 }, { baseUrl: 'http://search.internal:8080', fetchFn });
+  assert.deepEqual(result.results, [{ title: 'Title', url: 'https://example.com', description: 'Description', engines: ['test'] }]);
 });
-test('search reports missing keys and upstream errors without disclosing secrets', async () => {
+test('search reports missing configuration, empty results and upstream errors', async () => {
   await assert.rejects(searchWeb({ query: 'x' }, {}), /not configured/);
-  await assert.rejects(searchWeb({ query: 'x' }, { key: 'secret', fetchFn: async () => ({ ok: false, status: 429 }) }), /HTTP 429/);
+  await assert.rejects(searchWeb({ query: 'x' }, { baseUrl: 'http://search.internal', fetchFn: async () => ({ ok: false, status: 429 }) }), /HTTP 429/);
+  await assert.rejects(searchWeb({ query: 'x' }, { baseUrl: 'http://search.internal', fetchFn: async () => ({ ok: true, json: async () => ({ results: [] }) }) }), /No search results/);
 });
 test('scrape uses backend authentication and truncates content', async () => {
   const fetchFn = async (url, options) => {

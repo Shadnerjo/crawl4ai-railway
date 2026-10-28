@@ -1,12 +1,12 @@
 # Crawl4AI web MCP gateway
 
-A separate authenticated MCP service that exposes `search_web` using Brave Search and `scrape_web` using an existing Crawl4AI backend. This project uses Crawl4AI (https://github.com/unclecode/crawl4ai) for web data extraction and Brave Search API for search.
+A separate authenticated MCP service that exposes `search_web` using self-hosted SearXNG and `scrape_web` using an existing Crawl4AI backend. This project uses Crawl4AI (https://github.com/unclecode/crawl4ai) for web data extraction.
 
 Run `npm ci`, `npm test`, and `npm start` with Node 22 or newer. Configure these Railway variables:
 
 - `CRAWLER_URL`: private Crawl4AI service URL, including port 11235.
 - `CRAWLER_TOKEN`: reference to the crawler's `CRAWL4AI_API_TOKEN`.
-- `BRAVE_SEARCH_API_KEY`: Brave Search API key, required for search.
+- `SEARCH_URL`: the private SearXNG service URL, including port 8080.
 - `MCP_STATIC_TOKEN`: a distinct strong secret for clients supporting a bearer header; never commit this value.
 - `MCP_RESOURCE_URL`: the gateway's public HTTPS URL ending in `/mcp`.
 - `OAUTH_ISSUER`, `OAUTH_AUDIENCE`, `OAUTH_ALLOWED_SUBJECT`, `OAUTH_REQUIRED_SCOPE`: trusted OAuth issuer, API audience, one allowed user subject, and required API scope. OAuth is disabled unless all are configured.

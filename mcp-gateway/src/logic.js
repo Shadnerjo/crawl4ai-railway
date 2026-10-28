@@ -18,16 +18,21 @@ export async function validatePublicUrl(input, lookup = dns.lookup) {
   return url.toString();
 }
 
-export async function searchWeb({ query, count = 5 }, { key, fetchFn = fetch }) {
-  if (!key) throw new Error('Web search is not configured: set BRAVE_SEARCH_API_KEY on Railway.');
-  const endpoint = new URL('https://api.search.brave.com/res/v1/web/search');
+export async function searchWeb({ query, count = 5 }, { baseUrl, fetchFn = fetch }) {
+  if (!baseUrl) throw new Error('Web search is not configured: set SEARCH_URL on Railway.');
+  const endpoint = new URL('/search', baseUrl);
   endpoint.searchParams.set('q', query);
-  endpoint.searchParams.set('count', String(count));
-  const response = await fetchFn(endpoint, { headers: { Accept: 'application/json', 'X-Subscription-Token': key }, signal: AbortSignal.timeout(20000), redirect: 'error' });
+  endpoint.searchParams.set('format', 'json');
+  endpoint.searchParams.set('categories', 'general');
+  const response = await fetchFn(endpoint, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(30000), redirect: 'error' });
   if (!response.ok) throw new Error(`Search provider returned HTTP ${response.status}.`);
   const body = await response.json();
-  const results = (body.web?.results ?? []).slice(0, count).map(x => ({ title: x.title, url: x.url, description: x.description ?? '' }));
-  return { query, provider: 'Brave Search', results };
+  if (!Array.isArray(body.results)) throw new Error('Search provider returned an invalid response.');
+  const results = body.results.filter(x => {
+    try { return ['http:', 'https:'].includes(new URL(x.url).protocol); } catch { return false; }
+  }).slice(0, count).map(x => ({ title: x.title ?? '', url: x.url, description: x.content ?? '', engines: x.engines ?? [] }));
+  if (!results.length) throw new Error('No search results were returned. Search engines may be temporarily blocked or unavailable.');
+  return { query, provider: 'Self-hosted SearXNG', results, unavailable_engines: body.unresponsive_engines ?? [] };
 }
 
 export async function scrapeWeb({ url, max_chars = 30000 }, { baseUrl, token, fetchFn = fetch, lookup }) {

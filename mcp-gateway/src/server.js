@@ -48,10 +48,10 @@ function createServer() {
     catch (err) { return { isError: true, content: [{ type: 'text', text: err.message || 'Request failed.' }] }; }
   };
   server.registerTool('search_web', {
-    title: 'Search the web', description: 'Search the web for relevant sources and return titles, URLs, and snippets. Search queries are sent to Brave Search.',
+    title: 'Search the web', description: 'Search the web for relevant sources and return titles, URLs, and snippets. Queries are sent to external search engines by the self-hosted metasearch service.',
     inputSchema: { query: z.string().trim().min(1).max(600), count: z.number().int().min(1).max(10).default(5) },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
-  }, wrap(args => searchWeb(args, { key: env.BRAVE_SEARCH_API_KEY })));
+  }, wrap(args => searchWeb(args, { baseUrl: env.SEARCH_URL })));
   server.registerTool('scrape_web', {
     title: 'Read a web page', description: 'Retrieve a public web page as Markdown using the self-hosted Crawl4AI service.',
     inputSchema: { url: z.string().url().max(2048), max_chars: z.number().int().min(1000).max(100000).default(30000) },
