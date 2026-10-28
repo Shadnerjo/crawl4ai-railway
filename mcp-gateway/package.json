@@ -1,0 +1,21 @@
+{
+  "name": "crawl4ai-web-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "express": "5.1.0",
+    "ipaddr.js": "^2.2.0",
+    "jose": "6.1.0",
+    "zod": "4.6.7"
+  }
+}
+
