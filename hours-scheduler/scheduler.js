@@ -127,4 +127,7 @@ async function main(){
   else await controller.reconcile(action,resolved);
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)
-  main().catch(error=>{console.error(error.message);process.exitCode=1;});
+  main().then(
+    ()=>process.stdout.write(JSON.stringify({event:'complete'})+'\n',()=>process.exit(0)),
+    error=>process.stderr.write(error.message+'\n',()=>process.exit(1))
+  );
